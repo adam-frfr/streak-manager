@@ -50,6 +50,7 @@ function useSpringCounter(target) {
 export function useStreak() {
   const [streak, setStreak] = useState(null)
   const [message, setMessage] = useState('')
+  const [autoConfig, setAutoConfig] = useState({ enabled: false, direction: 1, lastUpdate: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -60,14 +61,48 @@ export function useStreak() {
     async function fetchStreak() {
       const { data, error } = await supabase
         .from('streak_data')
-        .select('value, message')
+        .select('value, message, auto_mode_enabled, auto_mode_direction, last_auto_update_date')
         .eq('id', 1)
         .single()
       if (error) {
         setError(error.message)
       } else {
-        setStreak(data.value)
+        let currentStreak = data.value
+        const isAutoEnabled = !!data.auto_mode_enabled
+        const autoDirection = data.auto_mode_direction ?? 1
+        let lastAutoUpdate = data.last_auto_update_date
+
+        let shouldUpdateDb = false
+
+        if (isAutoEnabled && lastAutoUpdate) {
+          const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
+          if (lastAutoUpdate !== today) {
+            const lastDate = new Date(lastAutoUpdate)
+            const currentDate = new Date(today)
+            const diffTime = currentDate - lastDate
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+            
+            if (diffDays > 0) {
+              currentStreak = currentStreak + (diffDays * autoDirection)
+              lastAutoUpdate = today
+              shouldUpdateDb = true
+            } else if (diffDays < 0) {
+              lastAutoUpdate = today
+              shouldUpdateDb = true
+            }
+          }
+        }
+
+        setStreak(currentStreak)
         setMessage(data.message || '')
+        setAutoConfig({ enabled: isAutoEnabled, direction: autoDirection, lastUpdate: lastAutoUpdate })
+
+        if (shouldUpdateDb) {
+          supabase.from('streak_data').update({
+            value: currentStreak,
+            last_auto_update_date: lastAutoUpdate
+          }).eq('id', 1).then() // Fire and forget update
+        }
       }
       setLoading(false)
     }
@@ -84,6 +119,11 @@ export function useStreak() {
         (payload) => {
           setStreak(payload.new.value)
           setMessage(payload.new.message || '')
+          setAutoConfig({
+            enabled: !!payload.new.auto_mode_enabled,
+            direction: payload.new.auto_mode_direction ?? 1,
+            lastUpdate: payload.new.last_auto_update_date
+          })
         }
       )
       .subscribe()
@@ -113,5 +153,40 @@ export function useStreak() {
     setMessage(newMessage)
   }, [])
 
-  return { streak, displayedStreak, message, loading, error, updateStreak, updateMessage }
+  const updateStreakAndAuto = useCallback(async (newStreak, newDirection) => {
+    // Only update direction if auto mode is on (so manual toggles during off mode don't change anything? 
+    // Wait, requirement: "When I manually press a button while auto mode is on, the auto direction updates")
+    const { error } = await supabase
+      .from('streak_data')
+      .update({ 
+        value: newStreak, 
+        ...(autoConfig.enabled ? { auto_mode_direction: newDirection } : {}) 
+      })
+      .eq('id', 1)
+    if (error) throw error
+    setStreak(newStreak)
+    if (autoConfig.enabled) {
+      setAutoConfig(prev => ({ ...prev, direction: newDirection }))
+    }
+  }, [autoConfig.enabled])
+
+  const toggleAutoMode = useCallback(async (enabled, currentStreak) => {
+    const today = new Date().toLocaleDateString('en-CA')
+    const direction = currentStreak > 0 ? 1 : -1
+    const { error } = await supabase
+      .from('streak_data')
+      .update({
+        auto_mode_enabled: enabled,
+        auto_mode_direction: direction,
+        last_auto_update_date: today
+      })
+      .eq('id', 1)
+    if (error) throw error
+    setAutoConfig({ enabled, direction, lastUpdate: today })
+  }, [])
+
+  return { 
+    streak, displayedStreak, message, autoConfig, loading, error, 
+    updateStreak, updateMessage, updateStreakAndAuto, toggleAutoMode 
+  }
 }

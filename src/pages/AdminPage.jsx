@@ -38,7 +38,7 @@ function PillButton({ label, color, onClick, disabled }) {
 }
 
 export default function AdminPage() {
-  const { streak, displayedStreak, message, loading, error, updateStreak, updateMessage } = useStreak()
+  const { streak, displayedStreak, message, autoConfig, loading, error, updateStreak, updateMessage, updateStreakAndAuto, toggleAutoMode } = useStreak()
   const [busy, setBusy] = useState(false)
   const [inputMsg, setInputMsg] = useState('')
 
@@ -62,7 +62,11 @@ export default function AdminPage() {
     setBusy(true)
     try {
       const newVal = streak <= 0 ? 1 : streak + 1
-      await updateStreak(newVal)
+      if (updateStreakAndAuto) {
+        await updateStreakAndAuto(newVal, 1)
+      } else {
+        await updateStreak(newVal)
+      }
     } finally {
       setBusy(false)
     }
@@ -73,7 +77,11 @@ export default function AdminPage() {
     setBusy(true)
     try {
       const newVal = streak > 0 ? 0 : streak - 1
-      await updateStreak(newVal)
+      if (updateStreakAndAuto) {
+        await updateStreakAndAuto(newVal, -1)
+      } else {
+        await updateStreak(newVal)
+      }
     } finally {
       setBusy(false)
     }
@@ -84,6 +92,16 @@ export default function AdminPage() {
     setBusy(true)
     try {
       await updateMessage(inputMsg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleToggleAuto = async () => {
+    if (busy || streak === null) return
+    setBusy(true)
+    try {
+      await toggleAutoMode(!autoConfig.enabled, streak)
     } finally {
       setBusy(false)
     }
@@ -100,7 +118,6 @@ export default function AdminPage() {
           </p>
         </div>
 
-        {/* Current streak display */}
         <div style={{ textAlign: 'center' }}>
           {loading ? (
             <span className="admin-streak-display zero">—</span>
@@ -114,6 +131,40 @@ export default function AdminPage() {
             </span>
           )}
         </div>
+
+        {/* Auto Mode Indicator */}
+        {!loading && !error && autoConfig && (
+          <div style={{ textAlign: 'center', marginTop: '-1rem', marginBottom: '1rem' }}>
+            {autoConfig.enabled ? (
+              <span style={{ 
+                fontSize: '0.8rem', 
+                color: autoConfig.direction > 0 ? '#4caf50' : '#f44336',
+                background: 'rgba(255,255,255,0.05)',
+                padding: '4px 12px',
+                borderRadius: '12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span className="status-dot" style={{ background: autoConfig.direction > 0 ? '#4caf50' : '#f44336' }} />
+                AUTO {autoConfig.direction > 0 ? 'UP' : 'DOWN'}
+              </span>
+            ) : (
+              <span style={{ 
+                fontSize: '0.8rem', 
+                color: 'rgba(255,255,255,0.3)',
+                background: 'rgba(255,255,255,0.02)',
+                padding: '4px 12px',
+                borderRadius: '12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                AUTO OFF
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="admin-divider" />
 
@@ -131,6 +182,23 @@ export default function AdminPage() {
             onClick={handleDidntText}
             disabled={busy || loading || !!error}
           />
+        </div>
+        
+        <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+          <button 
+            className="admin-submit-btn" 
+            onClick={handleToggleAuto}
+            disabled={busy || loading || !!error}
+            style={{ 
+              background: autoConfig?.enabled ? 'rgba(255,255,255,0.1)' : 'transparent',
+              border: '1px solid rgba(255,255,255,0.2)',
+              color: autoConfig?.enabled ? '#fff' : 'rgba(255,255,255,0.5)',
+              padding: '0.6rem 1.2rem',
+              width: 'auto'
+            }}
+          >
+            {autoConfig?.enabled ? 'DISABLE AUTO MODE' : 'ENABLE AUTO MODE'}
+          </button>
         </div>
 
         <div className="admin-divider" />
