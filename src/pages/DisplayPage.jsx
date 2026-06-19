@@ -69,7 +69,7 @@ export default function DisplayPage() {
             <span className="loading-number">—</span>
           ) : (
             <span className={`streak-number ${mode}`}>
-              -{displayedStreak}
+              {displayedStreak}
             </span>
           )}
         </div>
