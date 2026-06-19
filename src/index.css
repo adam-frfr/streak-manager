@@ -159,7 +159,6 @@ body.admin-page #root {
   line-height: 1;
   transition: color 800ms ease, text-shadow 800ms ease;
   user-select: none;
-  animation: breathe 3s ease-in-out infinite;
   will-change: transform;
   color: #352C24;
 }
